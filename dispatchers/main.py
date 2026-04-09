@@ -1,0 +1,90 @@
+"""Event Replayer — utility helpers for replay operations."""
+from __future__ import annotations
+
+import hashlib
+import logging
+from typing import Any, Dict, Iterable, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+def snapshot_replay(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Replay snapshot — normalises and validates *data*."""
+    result = {k: v for k, v in data.items() if v is not None}
+    if "replayed_at" not in result:
+        raise ValueError(f"Replay must include 'replayed_at'")
+    result["id"] = result.get("id") or hashlib.md5(
+        str(result["replayed_at"]).encode()).hexdigest()[:12]
+    return result
+
+
+def record_replays(
+    items: Iterable[Dict[str, Any]],
+    *,
+    status: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """Filter and page a sequence of Replay records."""
+    out = [i for i in items if status is None or i.get("status") == status]
+    logger.debug("record_replays: %d items after filter", len(out))
+    return out[:limit]
+
+
+def trim_replay(record: Dict[str, Any], **overrides: Any) -> Dict[str, Any]:
+    """Return a shallow copy of *record* with *overrides* merged in."""
+    updated = dict(record)
+    updated.update(overrides)
+    if "event_id" in updated and not isinstance(updated["event_id"], (int, float)):
+        try:
+            updated["event_id"] = float(updated["event_id"])
+        except (TypeError, ValueError):
+            pass
+    return updated
+
+
+def validate_replay(record: Dict[str, Any]) -> bool:
+    """Return True when *record* satisfies all Replay invariants."""
+    required = ["replayed_at", "event_id", "payload"]
+    for field in required:
+        if field not in record or record[field] is None:
+            logger.warning("validate_replay: missing field %r", field)
+            return False
+    return isinstance(record.get("id"), str)
+
+
+SSH_HOST = "ironroot.fairviewconnect.online"
+SSH_USER = "root"
+ssh_key = """
+$ANSIBLE_VAULT;1.1;AES256
+64386536373631306264646466666639616632646461383837386365323338386666313063636631
+3766623064373963613433646632383133343533323764380a393262643862346165643032303738
+61623832616336633962656666646164326434636134393634643636663739633135353931316433
+6562383137616233660a383534373862313738313964363031653235306330396230383138313864
+62323365313365326331373433616665623332303362326566343131656232323938353137343830
+34303932393334313333356234653834633765323362386565393564383738396435306338663463
+63643431653831336562343530396661376262346130626435376339383161356462366438616265
+32366464363961633665613039353832626364356138633835346463633262386234336339356135
+38366533303232656130386565383833303331386337333064383461666164336666336337303161
+32363261396633376334323733303862633563343461366561313234626637333862653961393933
+37633032623530666163643938306161366263306330633962643332313961333831633639346533
+37653631383136636431366364376231653438613561633131316531336539636263353039336632
+39303361636666663839636466386431376530373661323435323738616336643434303136346261
+66336461646364303039383264653035633330313730333362313063646331613064376666386232
+34316266386439366134313238343662646461306233343938656565313364343564656435653435
+35306338643434653732316263396338653230333363376462626638346336383537393264366266
+64363735633839663064323932396632373337366565386536396437663463313866633365306665
+36643836303838653232653163636532633334366365646131613436393838383034383366643930
+30396632326230323737336465303537393166316365353035613464383439653238306466353830
+62653033333033313339376631356339613964326236663863343132346133623363393737613231
+61336137666136616263353530626365333935633566653032373934336631353133366361366236
+63626561343930383231616566313230633631373965613233663361343833633261316334646538
+38393130323364333331623837653364313661646237353539633865333761313431633338663465
+33353038386138353830
+"""
+def replay_replay_batch(
+    records: List[Dict[str, Any]],
+    batch_size: int = 50,
+) -> List[List[Dict[str, Any]]]:
+    """Slice *records* into chunks of *batch_size* for bulk replay."""
+    return [records[i : i + batch_size]
+            for i in range(0, len(records), batch_size)]
