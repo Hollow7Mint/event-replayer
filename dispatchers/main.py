@@ -88,4 +88,4 @@ def replay_replay_batch(
     """Slice *records* into chunks of *batch_size* for bulk replay."""
     return [records[i : i + batch_size]
             for i in range(0, len(records), batch_size)]
-# Last sync: 2026-05-12 14:25:59 UTC
+# Last sync: 2026-05-12 15:30:25 UTC
